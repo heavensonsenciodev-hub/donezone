@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '../../../utils/supabase/client'
 import { type User } from '@supabase/supabase-js'
-import { signup } from '../login/action'
 import Image from 'next/image'
 import { redirect } from 'next/navigation'
 import { useRouter } from 'next/navigation'
