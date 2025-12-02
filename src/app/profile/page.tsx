@@ -1,4 +1,5 @@
 import { createClient } from "../../../utils/supabase/server";
+import ConfirmAccount from "./confirm-acc";
 
 
 export default async function Profile() {
