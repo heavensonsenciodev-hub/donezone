@@ -14,7 +14,7 @@ export default function EditorClient({ value = "", onChange }: EditorClientProps
   return (
     <div className="mb-8 sm:max-w-[425px] md:max-w-[600px] lg:max-w-[850px]">
       <Editor
-        apiKey="s4aj93cure64mj5h58ltm286m1rhiydjxo51kd10233zcotw"
+        apiKey={process.env.NEXT_PUBLIC_TINYMCE_API_KEY}
         value={value}
         init={{
           height: 300,
