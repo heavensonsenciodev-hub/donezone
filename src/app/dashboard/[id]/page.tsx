@@ -163,7 +163,7 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
   };
 
   // Drag start: store the numeric id under standard mime type
-  const handleDragStart = (event: React.DragEvent<HTMLLIElement>, id: number) => {
+  const handleDragStart = (event: React.DragEvent<HTMLDivElement | HTMLLIElement>, id: number) => {
     event.dataTransfer.setData("text/plain", String(id));
     event.dataTransfer.effectAllowed = "move";
   };
@@ -316,26 +316,6 @@ return (
             ))}
         </div>
       </div>
-
-
-
-
-      {/* <div className="flex-1 mt-3 overflow-auto" onDragOver={enableDropping}>
-        <ul className="space-y-2">
-          {tasks
-            .filter((task) => task.status === "new")
-            .map((task) => (
-              <div
-                key={task.id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, task.id)}
-                className="w-full min-h-10 bg-pink-300 border rounded-md flex items-center px-3 text-black text-sm break-words"
-                dangerouslySetInnerHTML={{ __html: task.title}}
-              >
-              </div>
-            ))}
-        </ul>
-      </div> */}
       
     </div>
 
