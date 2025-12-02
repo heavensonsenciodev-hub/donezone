@@ -69,7 +69,7 @@ export default function LoginPage() {
             >
               Sign up
             </button> */}
-            <a onClick={() => router.push('signup')} className='cursor-pointer flex items-center text-lg text-strongblue hover:underline'>Don't have an account? Sign up!</a>
+            <a onClick={() => router.push('signup')} className='cursor-pointer flex items-center text-lg text-strongblue hover:underline'>No account? Sign up!</a>
             <button
               formAction={login}
               className="bg-shipgrey text-white px-4 py-2 rounded-md w-36 cursor-pointer"
