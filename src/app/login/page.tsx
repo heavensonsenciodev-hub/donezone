@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '../../../utils/supabase/client'
 import Image from 'next/image'
 import { login } from './action'
+import { Spinner } from '@/components/ui/spinner'
 
 export default function LoginPage() {
   const router = useRouter()
   const [checkingSession, setCheckingSession] = useState(true)
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const supabase = createClient()
@@ -42,7 +44,17 @@ export default function LoginPage() {
         <div className="flex justify-center mt-7">
           <h1 className='font-bold text-lg'>Log in with your account</h1>
         </div>
-        <form className="flex flex-col gap-4 mt-6">
+        <form className="flex flex-col gap-4 mt-6"
+          onSubmit={(e) => {
+            const form = e.currentTarget
+            if (!form.checkValidity()) {
+              e.preventDefault() // prevent submission if invalid
+              form.reportValidity() // show browser validation
+              return
+            }
+            setLoading(true) // only set loading if valid
+          }}
+        >
           <label htmlFor="email" className="font-medium text-lg">Email:</label>
           <input
             id="email"
@@ -71,10 +83,11 @@ export default function LoginPage() {
             </button> */}
             <a onClick={() => router.push('signup')} className='cursor-pointer flex items-center text-lg text-strongblue hover:underline'>No account? Sign up!</a>
             <button
-              formAction={login}
-              className="bg-shipgrey text-white px-4 py-2 rounded-md w-36 cursor-pointer"
+              formAction={login} // keep this
+              className="bg-shipgrey text-white px-4 py-2 rounded-md w-36 cursor-pointer flex items-center justify-center"
+              disabled={loading} // optional: disable while logging in
             >
-              Login
+              {loading ? <Spinner /> : 'Login'}
             </button>
           </div>
         </form>
