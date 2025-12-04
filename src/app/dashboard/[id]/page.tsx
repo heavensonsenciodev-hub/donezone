@@ -350,9 +350,7 @@ return (
       <div className="flex-1 mt-3 overflow-auto" onDragOver={enableDropping}>
         <div className="space-y-2">
           {loading ? (
-            <>
-              <SkeletonArticle count={tasksPlaceholderCount} />
-            </>
+            <SkeletonArticle count={tasksPlaceholderCount} />
           ) : (
             tasks
               .filter((task) => task.status === "new")
@@ -361,11 +359,16 @@ return (
                   key={task.id}
                   draggable
                   onDragStart={(e) => handleDragStart(e, task.id)}
-                  className="w-full bg-pink-300 border rounded-md px-3 py-2 text-black text-sm"
+                  className="w-full bg-pink-300 border rounded-md px-3 py-2 text-black text-sm flex"
                 >
+                  {/* TEXT CONTENT */}
+                  <div
+                    className="prose prose-sm flex-1 break-words max-w-[calc(100%-35px)]"
+                    dangerouslySetInnerHTML={{ __html: task.title }}
+                  />
 
-                  {/* TOP RIGHT ICON */}
-                  <div className="w-full flex justify-end pb-2">
+                  {/* VERTICAL ICON */}
+                  <div className="flex-shrink-0 ml-2 self-start">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <span className="cursor-pointer flex items-center justify-center">
@@ -374,7 +377,6 @@ return (
                           </span>
                         </span>
                       </DropdownMenuTrigger>
-
                       <DropdownMenuContent>
                         {/* EDIT */}
                         <Dialog>
@@ -446,12 +448,6 @@ return (
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-
-                  {/* TEXT CONTENT — FIXED to prevent overflow */}
-                  <div
-                    className="prose prose-sm break-words max-w-full !block"
-                    dangerouslySetInnerHTML={{ __html: task.title }}
-                  />
                 </div>
               ))
           )}
@@ -472,9 +468,7 @@ return (
       <div className="flex-1 mt-3 overflow-auto" onDragOver={enableDropping} onDrop={(e) => handleDropOnColumn(e, "in-progress")}>
         <div className="space-y-2">
           {loading ? (
-            <>
-              <SkeletonArticle count={tasksPlaceholderCount}/>
-            </>
+            <SkeletonArticle count={tasksPlaceholderCount} />
           ) : (
             tasks
               .filter((task) => task.status === "in-progress")
@@ -483,12 +477,19 @@ return (
                   key={task.id}
                   draggable
                   onDragStart={(e) => handleDragStart(e, task.id)}
-                  className="w-full bg-pink-300 border rounded-md px-3 py-2 text-black text-sm break-words"
+                  className="w-full bg-pink-300 border rounded-md px-3 py-2 text-black text-sm flex"
                 >
-                  <div className="flex justify-end pb-2">
+                  {/* TEXT CONTENT */}
+                  <div
+                    className="flex-1 break-words max-w-[calc(100%-40px)] prose prose-sm"
+                    dangerouslySetInnerHTML={{ __html: task.title }}
+                  />
+
+                  {/* VERTICAL ICON */}
+                  <div className="flex-shrink-0 ml-2 self-start">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <span className="flex items-center justify-center cursor-pointer">
+                        <span className="cursor-pointer flex items-center justify-center">
                           <span className="material-symbols-outlined !text-[20px] hover:text-gray-600 transition-colors">
                             more_vert
                           </span>
@@ -561,11 +562,6 @@ return (
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-
-                  <div
-                    className="prose prose-sm"
-                    dangerouslySetInnerHTML={{ __html: task.title }}
-                  />
                 </div>
               ))
           )}
@@ -597,12 +593,13 @@ return (
                   key={task.id}
                   draggable
                   onDragStart={(e) => handleDragStart(e, task.id)}
-                  className="w-full bg-pink-300 border rounded-md px-3 py-2 text-black text-sm break-words"
+                  className="w-full bg-pink-300 border rounded-md px-3 py-2 text-black text-sm flex"
                 >
-                  <div className="flex justify-end pb-2">
-                    {/* <div className="border-inherit rounded-md w-full bg-yellow-600 p-1">
-                      In-progress
-                    </div> */}
+                  <div
+                    className="flex-1 break-words max-w-[calc(100%-40px)] prose prose-sm"
+                    dangerouslySetInnerHTML={{ __html: task.title }}
+                  />
+                  <div className="flex-shrink-0 ml-2 self-start">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <span className="flex items-center justify-center cursor-pointer">
@@ -668,10 +665,6 @@ return (
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>     
-                  <div
-                    className="prose prose-sm"
-                    dangerouslySetInnerHTML={{ __html: task.title }}
-                  />
                 </div>
               ))
           )
