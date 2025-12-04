@@ -363,7 +363,7 @@ return (
                 >
                   {/* TEXT CONTENT */}
                   <div
-                    className="prose prose-sm flex-1 break-words max-w-[calc(100%-35px)]"
+                    className="prose prose-sm flex-1 break-words max-w-[calc(100%-10px)]"
                     dangerouslySetInnerHTML={{ __html: task.title }}
                   />
 
@@ -386,6 +386,7 @@ return (
                                 setEditingTaskId(task.id);
                                 setEditingTaskContent(task.title);
                               }}
+                              className="cursor-pointer hover:text-gray-500"
                             >
                               Edit
                             </h1>
@@ -421,7 +422,7 @@ return (
                         {/* DELETE */}
                         <Dialog>
                           <DialogTrigger>
-                            <h1 onClick={() => setEditingTaskId(task.id)}>Delete</h1>
+                            <h1 onClick={() => setEditingTaskId(task.id)} className="cursor-pointer hover:text-red-400">Delete</h1>
                           </DialogTrigger>
 
                           <DialogContent>
@@ -481,7 +482,7 @@ return (
                 >
                   {/* TEXT CONTENT */}
                   <div
-                    className="flex-1 break-words max-w-[calc(100%-40px)] prose prose-sm"
+                    className="flex-1 break-words max-w-[calc(100%-10px)] prose prose-sm"
                     dangerouslySetInnerHTML={{ __html: task.title }}
                   />
 
@@ -504,6 +505,7 @@ return (
                                 setEditingTaskId(task.id);
                                 setEditingTaskContent(task.title);
                               }}
+                              className="cursor-pointer hover:text-gray-500"
                             >
                               Edit
                             </h1>
@@ -520,10 +522,10 @@ return (
                               />
                               <DialogFooter>
                                 <DialogClose asChild>
-                                  <Button type="button">Cancel</Button>
+                                  <Button type="button" className="cursor-pointer">Cancel</Button>
                                 </DialogClose>
                                 <DialogClose>
-                                  <Button type="button" onClick={updateTask}>
+                                  <Button type="button" onClick={updateTask} className="cursor-pointer">
                                     Update
                                   </Button>
                                 </DialogClose>
@@ -537,7 +539,7 @@ return (
                         {/* DELETE */}
                         <Dialog>
                           <DialogTrigger>
-                            <h1 onClick={() => setEditingTaskId(task.id)}>Delete</h1>
+                            <h1 onClick={() => setEditingTaskId(task.id)} className="cursor-pointer hover:text-red-400">Delete</h1>
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
@@ -545,13 +547,13 @@ return (
                             </DialogHeader>
                             <DialogFooter>
                               <DialogClose asChild>
-                                <Button type="button">Nevermind</Button>
+                                <Button type="button" className="cursor-pointer">Nevermind</Button>
                               </DialogClose>
                               <DialogClose>
                                 <Button
                                   type="button"
                                   onClick={deleteTask}
-                                  className="hover:bg-red-600 hover:text-white"
+                                  className="hover:bg-red-600 hover:text-white cursor-pointer"
                                 >
                                   Delete!
                                 </Button>
@@ -596,7 +598,7 @@ return (
                   className="w-full bg-pink-300 border rounded-md px-3 py-2 text-black text-sm flex"
                 >
                   <div
-                    className="flex-1 break-words max-w-[calc(100%-40px)] prose prose-sm"
+                    className="flex-1 break-words max-w-[calc(100%-10px)] prose prose-sm"
                     dangerouslySetInnerHTML={{ __html: task.title }}
                   />
                   <div className="flex-shrink-0 ml-2 self-start">
@@ -616,6 +618,7 @@ return (
                                 setEditingTaskId(task.id);         // store the task id
                                 setEditingTaskContent(task.title);  // populate editor with current title
                               }}
+                              className="cursor-pointer hover:text-gray-500"
                             >Edit</h1>
                           </DialogTrigger>
                           <DialogContent className="sm:max-w-[425px] md:max-w-[600px] lg:max-w-[900px] lg:max-h-[1000px]">
@@ -630,12 +633,12 @@ return (
                                 />
                               <DialogFooter>
                                 <DialogClose asChild>
-                                  <Button type="button">
+                                  <Button type="button" className="cursor-pointer">
                                     Cancel
                                   </Button>
                                 </DialogClose>
                                 <DialogClose>
-                                  <Button type="button" onClick={updateTask}>Update</Button>
+                                  <Button type="button" onClick={updateTask} className="cursor-pointer">Update</Button>
                                 </DialogClose>
                               </DialogFooter>
                             </form>
@@ -646,6 +649,7 @@ return (
                           <DialogTrigger>
                             <h1
                             onClick={() => setEditingTaskId(task.id)}
+                            className="cursor-pointer hover:text-red-400"
                             >Delete</h1>
                           </DialogTrigger>
                           <DialogContent>
@@ -654,10 +658,10 @@ return (
                             </DialogHeader>
                             <DialogFooter>
                               <DialogClose asChild>
-                                <Button type="button">Nevermind</Button>
+                                <Button type="button" className="cursor-pointer">Nevermind</Button>
                               </DialogClose>
                               <DialogClose>
-                                <Button type="button" onClick={deleteTask} className="hover:bg-red-600 hover:text-white">Delete!</Button>
+                                <Button type="button" onClick={deleteTask} className="hover:bg-red-600 hover:text-white cursor-pointer">Delete!</Button>
                               </DialogClose>
                             </DialogFooter>
                           </DialogContent>
