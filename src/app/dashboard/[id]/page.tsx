@@ -14,6 +14,14 @@ import {
   DialogTitle,
   DialogTrigger
 } from "@/components/ui/dialog"
+  import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+  } from "@/components/ui/dropdown-menu"
 
 interface Task {
   id: number;
@@ -33,6 +41,8 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
   const supabase = createClient();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [newTasks, setNewTasks] = useState("");
+  const [editingTaskContent, setEditingTaskContent] = useState("");
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [isOverDelete, setIsOverDelete] = useState(false);
   const [userId, setUserId] = useState<string | null>(null); // ✅ store logged-in user's UID
   const [loading, setLoading] = useState(true)
@@ -46,23 +56,7 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
     console.log("Form Submitted")
     setOpen(false)
   }
-
-  // ✅ Fetch current logged-in user (with debug log)
-  // useEffect(() => {
-  //   const getUser = async () => {
-  //     const {
-  //       data: { user },
-  //       error,
-  //     } = await supabase.auth.getUser();
-
-  //     console.log("🧍 Logged in user:", user); // 👈 Debug log
-
-  //     if (error) console.error("Error fetching user:", error.message);
-  //     else if (user) setUserId(user.id);
-  //   };
-
-  //   getUser();
-  // }, []);
+  
   useEffect(() => {
     const fetchUserData = async () => {
       const {
@@ -162,6 +156,57 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
     }
   };
 
+  const updateTask = async () => {
+    if (!editingTaskId || !editingTaskContent.trim()) return;
+
+    const { data, error } = await supabase
+      .from("tasks")
+      .upsert(
+        {
+          id: editingTaskId,
+          title: editingTaskContent,
+        },
+        { onConflict: "id" }
+      );
+
+    if (error) console.error(error);
+
+    // Update local state
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === editingTaskId ? { ...t, title: editingTaskContent } : t
+      )
+    );
+
+    // Close modal
+    setOpen(false);
+  };
+
+  const deleteTask = async () => {
+    if (!editingTaskId) return;
+
+    const { data, error } = await supabase
+      .from("tasks")
+      .delete()
+      .eq("id", editingTaskId)
+      .eq("uid", userId)
+      .select();
+
+    if (error) {
+      console.error("❌ Error deleting task:", error.message);
+      return;
+    }
+
+    // Remove from local state
+    setTasks((prev) => prev.filter((t) => t.id !== editingTaskId));
+
+    // Close modal if needed
+    setOpen(false);
+
+    console.log(`🗑️ Task ${editingTaskId} deleted successfully`);
+  }
+
+
   // Drag start: store the numeric id under standard mime type
   const handleDragStart = (event: React.DragEvent<HTMLDivElement | HTMLLIElement>, id: number) => {
     event.dataTransfer.setData("text/plain", String(id));
@@ -257,8 +302,8 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
 
 return (
 <div className="">
-  <h1 className="ml-[20px] mt-7 text-lg"><span className="font-medium">Welcome <span className="italic font-semibold">{userName}</span> Here is a simple <span className="italic font-semibold">Kanban Board</span> for you to manage your tasks.</span></h1>
-  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 p-5 min-h-screen">
+  <h1 className="ml-[20px] mt-7 text-lg"><span className="font-medium">Welcome <span className="italic font-semibold">{userName} !</span> Here is a simple <span className="italic font-semibold">Kanban Board</span> for you to manage your tasks.</span></h1>
+  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 p-5 min-h-screen">
 
     {/* New */}
     <div className="rounded-md bg-fantasy p-4 flex flex-col opacity-70 h-[80vh]">
@@ -308,8 +353,77 @@ return (
                 onDragStart={(e) => handleDragStart(e, task.id)}
                 className="w-full bg-pink-300 border rounded-md px-3 py-2 text-black text-sm break-words"
               >
+                <div className="flex justify-end pb-2">
+                  {/* <div className="border-inherit rounded-md w-full bg-green-600 p-1">
+                    New
+                  </div> */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <span className="flex items-center justify-center cursor-pointer">
+                      <span className="material-symbols-outlined !text-[20px] hover:text-gray-600 transition-colors">
+                        more_vert
+                      </span>
+                      </span>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <Dialog>
+                        <DialogTrigger>
+                          <h1
+                            onClick={() => {
+                              setEditingTaskId(task.id);         // store the task id
+                              setEditingTaskContent(task.title);  // populate editor with current title
+                            }}
+                          >Edit</h1>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[425px] md:max-w-[600px] lg:max-w-[900px] lg:max-h-[1000px]">
+                          <DialogHeader>
+                            <DialogTitle>Edit your task</DialogTitle>
+                            The zone where you can edit a specific task.
+                          </DialogHeader>
+                          <form action="" onSubmit={handleSubmit}>
+                              <EditorClient
+                                value={editingTaskContent}
+                                onChange={(content) => setEditingTaskContent(content)}
+                              />
+                            <DialogFooter>
+                              <DialogClose asChild>
+                                <Button type="button">
+                                  Cancel
+                                </Button>
+                              </DialogClose>
+                              <DialogClose>
+                                <Button type="button" onClick={updateTask}>Update</Button>
+                              </DialogClose>
+                            </DialogFooter>
+                          </form>
+                        </DialogContent>                       
+                      </Dialog>
+                      <DropdownMenuSeparator/>
+                      <Dialog>
+                        <DialogTrigger>
+                          <h1
+                          onClick={() => setEditingTaskId(task.id)}
+                          >Delete</h1>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            Are you sure that you want to delete this task?
+                          </DialogHeader>
+                          <DialogFooter>
+                            <DialogClose asChild>
+                              <Button type="button">Nevermind</Button>
+                            </DialogClose>
+                            <DialogClose>
+                              <Button type="button" onClick={deleteTask} className="hover:bg-red-600 hover:text-white">Delete!</Button>
+                            </DialogClose>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>                
                 <div
-                  className="prose prose-sm"
+                  className="prose prose-sm mt-2"
                   dangerouslySetInnerHTML={{ __html: task.title }}
                 />
               </div>
@@ -322,63 +436,204 @@ return (
     {/* In Progress */}
     <div
       className="rounded-md bg-fantasy p-4 flex flex-col opacity-70 h-[80vh]"
-      onDragOver={enableDropping}
-      onDrop={(e) => handleDropOnColumn(e, "in-progress")}
     >
       <div className="border-b-2 border-shipgrey">
         <h1 className="font-extrabold text-yellow-950  text-2xl">In Progress</h1>
         <p className="italic">List of tasks that are in progress.</p>
       </div>
 
-      <div className="flex-1 mt-3 overflow-auto">
-        <ul className="space-y-2">
+      <div className="flex-1 mt-3 overflow-auto" onDragOver={enableDropping} onDrop={(e) => handleDropOnColumn(e, "in-progress")}>
+        <div className="space-y-2">
           {tasks
             .filter((task) => task.status === "in-progress")
             .map((task) => (
-              <li
-              key={task.id}
-              draggable
-              onDragStart={(e) => handleDragStart(e, task.id)}
-              className="w-full min-h-10 bg-pink-300 border rounded-md flex items-center px-3 text-black text-sm"
+              <div
+                key={task.id}
+                draggable
+                onDragStart={(e) => handleDragStart(e, task.id)}
+                className="w-full bg-pink-300 border rounded-md px-3 py-2 text-black text-sm break-words"
               >
-                {task.title}
-              </li>
+                <div className="flex justify-end pb-2">
+                  {/* <div className="border-inherit rounded-md w-full bg-yellow-600 p-1">
+                    In-progress
+                  </div> */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <span className="flex items-center justify-center cursor-pointer">
+                      <span className="material-symbols-outlined !text-[20px] hover:text-gray-600 transition-colors">
+                        more_vert
+                      </span>
+                      </span>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <Dialog>
+                        <DialogTrigger>
+                          <h1
+                            onClick={() => {
+                              setEditingTaskId(task.id);         // store the task id
+                              setEditingTaskContent(task.title);  // populate editor with current title
+                            }}
+                          >Edit</h1>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[425px] md:max-w-[600px] lg:max-w-[900px] lg:max-h-[1000px]">
+                          <DialogHeader>
+                            <DialogTitle>Edit your task</DialogTitle>
+                            The zone where you can edit a specific task.
+                          </DialogHeader>
+                          <form action="" onSubmit={handleSubmit}>
+                              <EditorClient
+                                value={editingTaskContent}
+                                onChange={(content) => setEditingTaskContent(content)}
+                              />
+                            <DialogFooter>
+                              <DialogClose asChild>
+                                <Button type="button">
+                                  Cancel
+                                </Button>
+                              </DialogClose>
+                              <DialogClose>
+                                <Button type="button" onClick={updateTask}>Update</Button>
+                              </DialogClose>
+                            </DialogFooter>
+                          </form>
+                        </DialogContent>                       
+                      </Dialog>
+                      <DropdownMenuSeparator/>
+                      <Dialog>
+                        <DialogTrigger>
+                          <h1
+                          onClick={() => setEditingTaskId(task.id)}
+                          >Delete</h1>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            Are you sure that you want to delete this task?
+                          </DialogHeader>
+                          <DialogFooter>
+                            <DialogClose asChild>
+                              <Button type="button">Nevermind</Button>
+                            </DialogClose>
+                            <DialogClose>
+                              <Button type="button" onClick={deleteTask} className="hover:bg-red-600 hover:text-white">Delete!</Button>
+                            </DialogClose>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>                
+                <div
+                  className="prose prose-sm"
+                  dangerouslySetInnerHTML={{ __html: task.title }}
+                />
+              </div>
             ))}
-        </ul>
+        </div>
       </div>
     </div>
 
+      
+
     {/* Done */}
     <div
-      className="rounded-md bg-fantasy p-4 flex flex-col opacity-70 h-[80vh]"
-      onDragOver={enableDropping}
-      onDrop={(e) => handleDropOnColumn(e, "done")}
-    >
+      className="rounded-md bg-fantasy p-4 flex flex-col opacity-70 h-[80vh]">
       <div className="border-b-2 border-shipgrey">
         <h1 className="font-extrabold text-green-950  text-2xl">DoneZone</h1>
           <p className="italic">The zone where your tasks was done.</p>
       </div>
 
-      <div className="flex-1 mt-3 overflow-auto">
-        <ul className="space-y-2">
+      <div className="flex-1 mt-3 overflow-auto" onDragOver={enableDropping} onDrop={(e) => handleDropOnColumn(e, "done")}>
+        <div className="space-y-2">
           {tasks
             .filter((task) => task.status === "done")
             .map((task) => (
-              <li
+              <div
                 key={task.id}
                 draggable
                 onDragStart={(e) => handleDragStart(e, task.id)}
-                className="w-full min-h-10 bg-pink-300 border rounded-md flex items-center px-3 text-gray-800 text-sm"
+                className="w-full bg-pink-300 border rounded-md px-3 py-2 text-black text-sm break-words"
               >
-                {task.title}
-              </li>
+                <div className="flex justify-end pb-2">
+                  {/* <div className="border-inherit rounded-md w-full bg-yellow-600 p-1">
+                    In-progress
+                  </div> */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <span className="flex items-center justify-center cursor-pointer">
+                      <span className="material-symbols-outlined !text-[20px] hover:text-gray-600 transition-colors">
+                        more_vert
+                      </span>
+                      </span>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <Dialog>
+                        <DialogTrigger>
+                          <h1
+                            onClick={() => {
+                              setEditingTaskId(task.id);         // store the task id
+                              setEditingTaskContent(task.title);  // populate editor with current title
+                            }}
+                          >Edit</h1>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[425px] md:max-w-[600px] lg:max-w-[900px] lg:max-h-[1000px]">
+                          <DialogHeader>
+                            <DialogTitle>Edit your task</DialogTitle>
+                            The zone where you can edit a specific task.
+                          </DialogHeader>
+                          <form action="" onSubmit={handleSubmit}>
+                              <EditorClient
+                                value={editingTaskContent}
+                                onChange={(content) => setEditingTaskContent(content)}
+                              />
+                            <DialogFooter>
+                              <DialogClose asChild>
+                                <Button type="button">
+                                  Cancel
+                                </Button>
+                              </DialogClose>
+                              <DialogClose>
+                                <Button type="button" onClick={updateTask}>Update</Button>
+                              </DialogClose>
+                            </DialogFooter>
+                          </form>
+                        </DialogContent>                       
+                      </Dialog>
+                      <DropdownMenuSeparator/>
+                      <Dialog>
+                        <DialogTrigger>
+                          <h1
+                          onClick={() => setEditingTaskId(task.id)}
+                          >Delete</h1>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            Are you sure that you want to delete this task?
+                          </DialogHeader>
+                          <DialogFooter>
+                            <DialogClose asChild>
+                              <Button type="button">Nevermind</Button>
+                            </DialogClose>
+                            <DialogClose>
+                              <Button type="button" onClick={deleteTask} className="hover:bg-red-600 hover:text-white">Delete!</Button>
+                            </DialogClose>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>     
+                <div
+                  className="prose prose-sm"
+                  dangerouslySetInnerHTML={{ __html: task.title }}
+                />
+              </div>
             ))}
-        </ul>
+        </div>
       </div>
     </div>
 
     {/* Delete */}
-    <div
+    {/* <div
       className={`rounded-md p-4 flex flex-col opacity-70 h-[80vh] transition-all duration-300 ${
         isOverDelete ? "bg-red-600 border-red-800 text-white" : "bg-lilac"
       }`}
@@ -400,7 +655,7 @@ return (
         <span className="material-symbols-outlined text-5xl">delete</span>
         <p className="mt-2 text-sm text-center">Drag a task here to delete</p>
       </div>
-    </div>
+    </div> */}
 
   </div>
 </div>

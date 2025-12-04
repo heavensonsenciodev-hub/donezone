@@ -31,7 +31,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               />
             </div> */}
             <div className="flex gap-4">
-            <DropdownMenu>
+            {/* <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <span className="flex items-center justify-center w-10 h-10 cursor-pointer">
                   <span className="material-symbols-outlined text-[24px] hover:text-gray-600 transition-colors">
@@ -46,7 +46,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 <h1>LOL</h1>
                 <h1>LOL</h1>
               </DropdownMenuContent>
-            </DropdownMenu>
+            </DropdownMenu> */}
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -59,12 +59,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               <DropdownMenuContent>
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>View Profile</DropdownMenuItem>
+                {/* <DropdownMenuItem>View Profile</DropdownMenuItem> */}
 
                 <form action={logout}>
                   <button
                     type="submit"
-                    className="w-full text-left px-2 py-1 hover:bg-gray-100"
+                    className="w-full text-sm text-red-600 text-left px-2 py-1 hover:bg-gray-100"
                   >
                     Logout
                   </button>
