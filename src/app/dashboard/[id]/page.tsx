@@ -15,29 +15,14 @@ import {
   DialogTrigger
 } from "@/components/ui/dialog"
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-
 import SkeletonArticle from '../../../components/SkeletonArticle';
 
 interface Task {
   id: number;
   title: string;
   status: string;
-  uid?: string; // ✅ include uid to represent user who added it
-}
-
-function stripParagraphTags(html: string) {
-    return html
-    .replace(/^<p>/i, "")      // remove starting <p>
-    .replace(/<\/p>$/i, "")    // remove ending </p>
-    .trim();
+  uid?: string;
+  position?: number; // <-- position used for ordering (lower = higher on UI)
 }
 
 export default function DashboardIdPage({ params }: { params: { id: string } }) {
@@ -46,8 +31,7 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
   const [newTasks, setNewTasks] = useState("");
   const [editingTaskContent, setEditingTaskContent] = useState("");
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
-  const [isOverDelete, setIsOverDelete] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null); // ✅ store logged-in user's UID
+  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const router = useRouter();
@@ -57,10 +41,9 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault()
-    console.log("Form Submitted")
     setOpen(false)
   }
-  
+
   useEffect(() => {
     const fetchUserData = async () => {
       const {
@@ -72,11 +55,10 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
 
       setUserId(user.id);
 
-      // Fetch the user's profile from the profiles table
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("username")   // Change the column depending on what you named it
-        .eq("id", user.id)     // Must match your RLS setup (id = auth.uid)
+        .select("username")
+        .eq("id", user.id)
         .single();
 
       if (profileError) {
@@ -84,35 +66,32 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
         return;
       }
 
-      setUserName(profile.username);  // Store the name
+      setUserName(profile.username);
     };
 
     fetchUserData();
   }, []);
 
-  
-
-
-  // ✅ Fetch only the current user's tasks
+  // Fetch tasks ordered by position ascending (top-first)
   useEffect(() => {
     if (!userId) return;
     const getTasks = async () => {
       const { data, error } = await supabase
         .from("tasks")
         .select("*")
-        .eq("uid", userId); // ✅ only fetch tasks created by this user
+        .eq("uid", userId)
+        .order("position", { ascending: true }); // <= order by position
 
       if (error) {
         console.error("❌ Error fetching tasks:", JSON.stringify(error, null, 2));
       } else {
         setTasks(data || []);
         setLoading(false);
-        console.log("✅ loaded tasks:", data);
       }
     };
 
     getTasks();
-  }, [userId]); // ✅ re-run when userId is set
+  }, [userId]);
 
   useEffect(() => {
     let mounted = true
@@ -137,17 +116,19 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
     }
   }, [router])
 
-  // ✅ Add task with user id
+  // Add task with a position set to now (so new tasks go to bottom by default)
   const addTask = async () => {
     if (!newTasks.trim() || !userId) return;
 
+    const nowPos = Date.now(); // big integer position
     const { data, error } = await supabase
       .from("tasks")
       .insert([
         {
           title: newTasks,
           status: "new",
-          uid: userId, // ✅ associate task with logged-in user
+          uid: userId,
+          position: nowPos,
         },
       ])
       .select();
@@ -155,9 +136,8 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
     if (error) {
       console.error("❌ Error adding task:", JSON.stringify(error, null, 2));
     } else if (data) {
-      setTasks((prev) => [...prev, ...data]);
+      setTasks((prev) => [...prev, ...data].sort((a,b)=> (a.position ?? 0) - (b.position ?? 0)));
       setNewTasks("");
-      console.log("✅ added task:", data);
     }
   };
 
@@ -166,24 +146,19 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
 
     const { data, error } = await supabase
       .from("tasks")
-      .upsert(
-        {
-          id: editingTaskId,
-          title: editingTaskContent,
-        },
-        { onConflict: "id" }
-      );
+      .update({
+        title: editingTaskContent
+      })
+      .eq("id", editingTaskId);
 
     if (error) console.error(error);
 
-    // Update local state
     setTasks((prev) =>
       prev.map((t) =>
         t.id === editingTaskId ? { ...t, title: editingTaskContent } : t
       )
     );
 
-    // Close modal
     setOpen(false);
   };
 
@@ -202,29 +177,41 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
       return;
     }
 
-    // Remove from local state
     setTasks((prev) => prev.filter((t) => t.id !== editingTaskId));
-
-    // Close modal if needed
     setOpen(false);
-
-    console.log(`🗑️ Task ${editingTaskId} deleted successfully`);
   }
 
-
-  // Drag start: store the numeric id under standard mime type
+  // Drag start
   const handleDragStart = (event: React.DragEvent<HTMLDivElement | HTMLLIElement>, id: number) => {
     event.dataTransfer.setData("text/plain", String(id));
     event.dataTransfer.effectAllowed = "move";
   };
 
-  // Keep dropping allowed
-  const enableDropping = (event: React.DragEvent<HTMLDivElement>) => {
+  // Keep dropping allowed on column or task
+  const enableDropping = (event: React.DragEvent) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
   };
 
-  // Generic drop handler which optimistically updates UI, then updates Supabase
+  // Helper: reindex positions in a column so there are large gaps (multiples of 1000)
+  const reindexColumn = async (status: string) => {
+    const columnTasks = tasks
+      .filter(t => t.status === status)
+      .sort((a,b) => (a.position ?? 0) - (b.position ?? 0));
+
+    // assign positions = i * 1000
+    const updates = columnTasks.map((t, i) => ({ id: t.id, position: (i + 1) * 1000 }));
+    if (updates.length === 0) return;
+
+    // update one-by-one (could be batched). Here we do a single RPC per task for simplicity
+    for (const u of updates) {
+      // optimistic local update
+      setTasks(prev => prev.map(p => p.id === u.id ? { ...p, position: u.position } : p));
+      await supabase.from('tasks').update({ position: u.position }).eq('id', u.id).eq('uid', userId);
+    }
+  };
+
+  // Drop on column background -> place at top (we'll set position to minPosition - gap)
   const handleDropOnColumn = async (
     event: React.DragEvent<HTMLDivElement>,
     newStatus: string
@@ -233,478 +220,318 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
 
     const idStr = event.dataTransfer.getData("text/plain");
     if (!idStr) return;
-
     const idNum = Number(idStr);
-    if (Number.isNaN(idNum)) {
-      console.warn("Dropped id is not a number:", idStr);
-      return;
-    }
+    if (Number.isNaN(idNum)) return;
 
-    const oldTask = tasks.find((t) => t.id === idNum);
-    const oldStatus = oldTask?.status ?? null;
+    // compute new position: make it smaller than current smallest to appear at top
+    const column = tasks.filter(t => t.status === newStatus);
+    const minPos = column.length ? Math.min(...column.map(t => t.position ?? 0)) : undefined;
+    const GAP = 1000;
+    const newPos = (typeof minPos === "number") ? (minPos - GAP) : Date.now();
 
-    setTasks((prev) =>
-      prev.map((t) => (t.id === idNum ? { ...t, status: newStatus } : t))
-    );
+    // optimistic UI update
+    setTasks(prev => prev.map(t => t.id === idNum ? { ...t, status: newStatus, position: newPos } : t).sort((a,b)=> (a.position ?? 0) - (b.position ?? 0)));
 
     const { data, error } = await supabase
       .from("tasks")
-      .update({ status: newStatus })
+      .update({ status: newStatus, position: newPos })
       .eq("id", idNum)
-      .eq("uid", userId) // ✅ safety: only update user’s own tasks
+      .eq("uid", userId)
       .select();
 
     if (error) {
-      console.error("❌ Error updating status:", JSON.stringify(error, null, 2));
-      if (oldStatus !== null) {
-        setTasks((prev) =>
-          prev.map((t) => (t.id === idNum ? { ...t, status: oldStatus } : t))
-        );
-      }
+      console.error("❌ Error updating status/position:", error);
+      // revert: reload or reset
+      // simple fallback: re-fetch tasks
+      const { data: refetch, error: refetchErr } = await supabase.from("tasks").select("*").eq("uid", userId).order("position",{ascending:true});
+      if (!refetchErr) setTasks(refetch || []);
       return;
     }
 
-    if (data && data.length > 0) {
-      const updated = data[0];
-      setTasks((prev) =>
-        prev.map((t) => (t.id === updated.id ? { ...t, status: updated.status } : t))
-      );
-      console.log(`✅ task ${idNum} status updated → ${newStatus}`);
+    // If positions are too close / collisions happen, reindex column
+    // Detect small gaps: if any adjacent gap <= 1, reindex
+    const updatedColumn = (await supabase.from("tasks").select("*").eq("uid", userId).order("position", { ascending: true })).data || [];
+    // update local
+    setTasks(updatedColumn);
+    // if needed reindex
+    // (simple heuristic) reindex if any adjacent positions differ by <= 1
+    for (let i=1;i<updatedColumn.length;i++){
+      if ((updatedColumn[i].position ?? 0) - (updatedColumn[i-1].position ?? 0) <= 1) {
+        await reindexColumn(newStatus);
+        break;
+      }
     }
   };
 
-  const handleDropDeleteColumn = async (event: React.DragEvent<HTMLDivElement>) => {
+  // Drop on a specific task element — insert before/after based on where the user dropped
+  const handleDropOnTask = async (
+    event: React.DragEvent<HTMLDivElement>,
+    targetId: number,
+    targetStatus: string
+  ) => {
     event.preventDefault();
 
     const idStr = event.dataTransfer.getData("text/plain");
     if (!idStr) return;
+    const draggedId = Number(idStr);
+    if (Number.isNaN(draggedId)) return;
+    if (draggedId === targetId) return;
 
-    const idNum = Number(idStr);
-    if (Number.isNaN(idNum)) {
-      console.warn("Dropped id is not a number:", idStr);
-      return;
+    // Determine whether to insert before or after target by comparing drop Y with target midpoint
+    const currentTarget = event.currentTarget as HTMLElement;
+    const rect = currentTarget.getBoundingClientRect();
+    const clientY = (event as React.DragEvent).clientY;
+    const insertBefore = clientY < rect.top + rect.height / 2;
+
+    const column = tasks
+      .filter(t => t.status === targetStatus)
+      .sort((a,b) => (a.position ?? 0) - (b.position ?? 0));
+
+    const targetIndex = column.findIndex(t => t.id === targetId);
+    const targetTask = column[targetIndex];
+
+    const prevPos = targetIndex > 0 ? (column[targetIndex - 1].position ?? 0) : undefined;
+    const nextPos = targetTask?.position ?? undefined;
+
+    // compute new position by averaging neighbors to avoid mass updates
+    let newPos: number;
+    const GAP = 1000;
+
+    if (insertBefore) {
+      if (typeof prevPos === "number") {
+        newPos = Math.floor((prevPos + (nextPos ?? prevPos + GAP)) / 2);
+      } else {
+        // insert before first => make it smaller than first
+        newPos = (nextPos ?? Date.now()) - GAP;
+      }
+    } else {
+      // insert after target
+      const next = column[targetIndex + 1];
+      const nextPos2 = next?.position;
+      if (typeof nextPos2 === "number") {
+        newPos = Math.floor(((nextPos2) + (nextPos ?? nextPos2)) / 2);
+      } else {
+        // after last => larger than target
+        newPos = (nextPos ?? Date.now()) + GAP;
+      }
     }
 
-    const taskToDelete = tasks.find((t) => t.id === idNum);
-    if (!taskToDelete) return;
+    // If somehow newPos equals an existing pos (rare), offset by 1
+    if (column.some(t => t.position === newPos)) newPos += 1;
 
-    setTasks((prev) => prev.filter((t) => t.id !== idNum));
+    // optimistic update: set status and position locally and re-sort
+    setTasks(prev =>
+      prev.map(t => (t.id === draggedId ? { ...t, status: targetStatus, position: newPos } : t))
+          .sort((a,b) => (a.position ?? 0) - (b.position ?? 0))
+    );
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("tasks")
-      .delete()
-      .eq("id", idNum)
-      .eq("uid", userId); // ✅ only delete if owned by this user
+      .update({ status: targetStatus, position: newPos })
+      .eq("id", draggedId)
+      .eq("uid", userId)
+      .select();
 
     if (error) {
-      console.error("❌ Error deleting task:", error.message);
-      setTasks((prev) => [...prev, taskToDelete]);
+      console.error("❌ Error updating dragged task position:", error);
+      // fallback: re-fetch
+      const { data: refetch, error: refetchErr } = await supabase.from("tasks").select("*").eq("uid", userId).order("position",{ascending:true});
+      if (!refetchErr) setTasks(refetch || []);
       return;
     }
 
-    console.log(`🗑️ Task ${idNum} deleted successfully.`);
+    // If positions are too tight, reindex the target column
+    const updatedColumn = (await supabase.from("tasks").select("*").eq("uid", userId).order("position", { ascending: true })).data || [];
+    setTasks(updatedColumn);
+    for (let i=1;i<updatedColumn.length;i++){
+      if ((updatedColumn[i].position ?? 0) - (updatedColumn[i-1].position ?? 0) <= 1) {
+        await reindexColumn(targetStatus);
+        break;
+      }
+    }
   };
 
-return (
-<div className="">
-  <h1 className="ml-[20px] mt-7 text-lg"><span className="font-medium">Welcome <span className="italic font-semibold">{userName} !</span> Here is a simple <span className="italic font-semibold">Kanban Board</span> for you to manage your tasks.</span></h1>
-  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 p-5 min-h-screen">
-
-    {/* New */}
-    <div className="rounded-md bg-fantasy p-4 flex flex-col opacity-70 h-[80vh]">
-      <div className="border-b-2 border-shipgrey mb-3">
-        <h1 className="font-extrabold text-shipgrey text-2xl">Task List</h1>
-        <p className="italic">Write your tasks in this zone.</p>
-      </div>
-
-      <div className="flex w-full items-center">
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="w-full">+</Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px] md:max-w-[600px] lg:max-w-[900px] lg:max-h-[1000px]">
-            <DialogHeader>
-              <DialogTitle>Add your tasks</DialogTitle>
-              The zone where you start listing your tasks.
-            </DialogHeader>
-            <form action="" onSubmit={handleSubmit}>
-                <EditorClient
-                  value={newTasks}
-                  onChange={(content: string) => setNewTasks(content)}
-                />
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button type="button">
-                    Cancel
-                  </Button>
-                </DialogClose>
-                <DialogClose>
-                  <Button type="button" onClick={addTask}>Add Task</Button>
-                </DialogClose>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-      
-      <div className="flex-1 mt-3 overflow-auto" onDragOver={enableDropping}>
-        <div className="space-y-2">
-          {loading ? (
-            <SkeletonArticle count={tasksPlaceholderCount} />
-          ) : (
-            tasks
-              .filter((task) => task.status === "new")
-              .map((task) => (
-                <div
-                  key={task.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, task.id)}
-                  className="w-full bg-pink-300 border rounded-md px-3 py-2 text-black text-sm flex"
+  // Helper to render tasks for a given status (important: sort by position before mapping)
+  const renderColumnTasks = (status: string) => {
+    return tasks
+      .filter((task) => task.status === status)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .map((task) => (
+        <div
+          key={task.id}
+          data-task-id={task.id}
+          draggable
+          onDragStart={(e) => handleDragStart(e, task.id)}
+          onDragOver={enableDropping}
+          onDrop={(e) => handleDropOnTask(e, task.id, task.status)} // drop onto this item
+          className="w-full bg-pink-300 border rounded-md px-3 py-2 text-black text-sm flex items-start gap-2"
+        >
+          <div
+            className="prose prose-sm flex-1 min-w-0 break-words"
+            dangerouslySetInnerHTML={{ __html: task.title }}
+          />
+          <div className="space-x-2 flex items-center shrink-0">
+            <Dialog>
+              <DialogTrigger>
+                <h1
+                  onClick={() => {
+                    setEditingTaskId(task.id);
+                    setEditingTaskContent(task.title);
+                  }}
+                  className="cursor-pointer hover:text-gray-500 material-symbols-outlined !text-[20px]"
                 >
-                  {/* TEXT CONTENT */}
-                  <div
-                    className="prose prose-sm flex-1 break-words max-w-[calc(100%-10px)]"
-                    dangerouslySetInnerHTML={{ __html: task.title }}
+                  edit
+                </h1>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Edit your task</DialogTitle>
+                </DialogHeader>
+
+                <form onSubmit={handleSubmit}>
+                  <EditorClient
+                    value={editingTaskContent}
+                    onChange={(content) => setEditingTaskContent(content)}
                   />
 
-                  {/* VERTICAL ICON */}
-                  <div className="flex-shrink-0 ml-2 self-start">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <span className="cursor-pointer flex items-center justify-center">
-                          <span className="material-symbols-outlined !text-[20px] hover:text-gray-600 transition-colors">
-                            more_vert
-                          </span>
-                        </span>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        {/* EDIT */}
-                        <Dialog>
-                          <DialogTrigger>
-                            <h1
-                              onClick={() => {
-                                setEditingTaskId(task.id);
-                                setEditingTaskContent(task.title);
-                              }}
-                              className="cursor-pointer hover:text-gray-500"
-                            >
-                              Edit
-                            </h1>
-                          </DialogTrigger>
-                          <DialogContent className="sm:max-w-[425px] md:max-w-[600px] lg:max-w-[900px] lg:max-h-[1000px]">
-                            <DialogHeader>
-                              <DialogTitle>Edit your task</DialogTitle>
-                              The zone where you can edit a specific task.
-                            </DialogHeader>
+                  <DialogFooter>
+                    <DialogClose asChild>
+                      <Button type="button">Cancel</Button>
+                    </DialogClose>
+                    <DialogClose>
+                      <Button type="button" onClick={updateTask}>
+                        Update
+                      </Button>
+                    </DialogClose>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
 
-                            <form onSubmit={handleSubmit}>
-                              <EditorClient
-                                value={editingTaskContent}
-                                onChange={(content) => setEditingTaskContent(content)}
-                              />
+            <Dialog>
+              <DialogTrigger>
+                <h1 onClick={() => setEditingTaskId(task.id)} className="cursor-pointer hover:text-red-400 material-symbols-outlined !text-[20px]">delete</h1>
+              </DialogTrigger>
 
-                              <DialogFooter>
-                                <DialogClose asChild>
-                                  <Button type="button">Cancel</Button>
-                                </DialogClose>
-                                <DialogClose>
-                                  <Button type="button" onClick={updateTask}>
-                                    Update
-                                  </Button>
-                                </DialogClose>
-                              </DialogFooter>
-                            </form>
-                          </DialogContent>
-                        </Dialog>
+              <DialogContent>
+                <DialogHeader>
+                  Are you sure that you want to delete this task?
+                </DialogHeader>
 
-                        <DropdownMenuSeparator />
-
-                        {/* DELETE */}
-                        <Dialog>
-                          <DialogTrigger>
-                            <h1 onClick={() => setEditingTaskId(task.id)} className="cursor-pointer hover:text-red-400">Delete</h1>
-                          </DialogTrigger>
-
-                          <DialogContent>
-                            <DialogHeader>
-                              Are you sure that you want to delete this task?
-                            </DialogHeader>
-
-                            <DialogFooter>
-                              <DialogClose asChild>
-                                <Button type="button">Nevermind</Button>
-                              </DialogClose>
-                              <DialogClose>
-                                <Button
-                                  type="button"
-                                  onClick={deleteTask}
-                                  className="hover:bg-red-600 hover:text-white"
-                                >
-                                  Delete!
-                                </Button>
-                              </DialogClose>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              ))
-          )}
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button type="button">Nevermind</Button>
+                  </DialogClose>
+                  <DialogClose>
+                    <Button
+                      type="button"
+                      onClick={deleteTask}
+                      className="hover:bg-red-600 hover:text-white"
+                    >
+                      Delete!
+                    </Button>
+                  </DialogClose>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
-      </div>
-      
-    </div>
+      ));
+  };
 
-    {/* In Progress */}
-    <div
-      className="rounded-md bg-fantasy p-4 flex flex-col opacity-70 h-[80vh]"
-    >
-      <div className="border-b-2 border-shipgrey">
-        <h1 className="font-extrabold text-yellow-950  text-2xl">In Progress</h1>
-        <p className="italic">List of tasks that are in progress.</p>
-      </div>
+  return (
+    <div className="">
+      <h1 className="ml-[20px] mt-7 text-lg"><span className="font-medium">Welcome <span className="italic font-semibold">{userName} !</span> Here is a simple <span className="italic font-semibold">Kanban Board</span> for you to manage your tasks.</span></h1>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 p-5 min-h-screen">
 
-      <div className="flex-1 mt-3 overflow-auto" onDragOver={enableDropping} onDrop={(e) => handleDropOnColumn(e, "in-progress")}>
-        <div className="space-y-2">
-          {loading ? (
-            <SkeletonArticle count={tasksPlaceholderCount} />
-          ) : (
-            tasks
-              .filter((task) => task.status === "in-progress")
-              .map((task) => (
-                <div
-                  key={task.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, task.id)}
-                  className="w-full bg-pink-300 border rounded-md px-3 py-2 text-black text-sm flex"
-                >
-                  {/* TEXT CONTENT */}
-                  <div
-                    className="flex-1 break-words max-w-[calc(100%-10px)] prose prose-sm"
-                    dangerouslySetInnerHTML={{ __html: task.title }}
-                  />
+        {/* New */}
+        <div className="rounded-md bg-fantasy p-4 flex flex-col opacity-70 h-[80vh]">
+          <div className="border-b-2 border-shipgrey mb-3">
+            <h1 className="font-extrabold text-shipgrey text-2xl">Task List</h1>
+            <p className="italic">Write your tasks in this zone.</p>
+          </div>
 
-                  {/* VERTICAL ICON */}
-                  <div className="flex-shrink-0 ml-2 self-start">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <span className="cursor-pointer flex items-center justify-center">
-                          <span className="material-symbols-outlined !text-[20px] hover:text-gray-600 transition-colors">
-                            more_vert
-                          </span>
-                        </span>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        {/* EDIT */}
-                        <Dialog>
-                          <DialogTrigger>
-                            <h1
-                              onClick={() => {
-                                setEditingTaskId(task.id);
-                                setEditingTaskContent(task.title);
-                              }}
-                              className="cursor-pointer hover:text-gray-500"
-                            >
-                              Edit
-                            </h1>
-                          </DialogTrigger>
-                          <DialogContent className="sm:max-w-[425px] md:max-w-[600px] lg:max-w-[900px] lg:max-h-[1000px]">
-                            <DialogHeader>
-                              <DialogTitle>Edit your task</DialogTitle>
-                              The zone where you can edit a specific task.
-                            </DialogHeader>
-                            <form onSubmit={handleSubmit}>
-                              <EditorClient
-                                value={editingTaskContent}
-                                onChange={(content) => setEditingTaskContent(content)}
-                              />
-                              <DialogFooter>
-                                <DialogClose asChild>
-                                  <Button type="button" className="cursor-pointer">Cancel</Button>
-                                </DialogClose>
-                                <DialogClose>
-                                  <Button type="button" onClick={updateTask} className="cursor-pointer">
-                                    Update
-                                  </Button>
-                                </DialogClose>
-                              </DialogFooter>
-                            </form>
-                          </DialogContent>
-                        </Dialog>
+          <div className="flex w-full items-center">
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button className="w-full">+</Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px] md:max-w-[600px] lg:max-w-[900px] lg:max-h-[1000px]">
+                <DialogHeader>
+                  <DialogTitle>Add your tasks</DialogTitle>
+                  The zone where you start listing your tasks.
+                </DialogHeader>
+                <form action="" onSubmit={handleSubmit}>
+                    <EditorClient
+                      value={newTasks}
+                      onChange={(content: string) => setNewTasks(content)}
+                    />
+                  <DialogFooter>
+                    <DialogClose asChild>
+                      <Button type="button">
+                        Cancel
+                      </Button>
+                    </DialogClose>
+                    <DialogClose>
+                      <Button type="button" onClick={addTask}>Add Task</Button>
+                    </DialogClose>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
 
-                        <DropdownMenuSeparator />
+          <div className="flex-1 mt-3 overflow-auto" onDragOver={enableDropping} onDrop={(e) => handleDropOnColumn(e, "new")}>
+            <div className="space-y-2">
+              {loading ? (
+                <SkeletonArticle count={tasksPlaceholderCount} />
+              ) : (
+                renderColumnTasks("new")
+              )}
+            </div>
+          </div>
 
-                        {/* DELETE */}
-                        <Dialog>
-                          <DialogTrigger>
-                            <h1 onClick={() => setEditingTaskId(task.id)} className="cursor-pointer hover:text-red-400">Delete</h1>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              Are you sure that you want to delete this task?
-                            </DialogHeader>
-                            <DialogFooter>
-                              <DialogClose asChild>
-                                <Button type="button" className="cursor-pointer">Nevermind</Button>
-                              </DialogClose>
-                              <DialogClose>
-                                <Button
-                                  type="button"
-                                  onClick={deleteTask}
-                                  className="hover:bg-red-600 hover:text-white cursor-pointer"
-                                >
-                                  Delete!
-                                </Button>
-                              </DialogClose>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              ))
-          )}
+        </div>
+
+        {/* In Progress */}
+        <div
+          className="rounded-md bg-fantasy p-4 flex flex-col opacity-70 h-[80vh]"
+        >
+          <div className="border-b-2 border-shipgrey">
+            <h1 className="font-extrabold text-yellow-950  text-2xl">In Progress</h1>
+            <p className="italic">List of tasks that are in progress.</p>
+          </div>
+
+          <div className="flex-1 mt-3 overflow-auto" onDragOver={enableDropping} onDrop={(e) => handleDropOnColumn(e, "in-progress")}>
+            <div className="space-y-2">
+              {loading ? (
+                <SkeletonArticle count={tasksPlaceholderCount} />
+              ) : (
+                renderColumnTasks("in-progress")
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Done */}
+        <div
+          className="rounded-md bg-fantasy p-4 flex flex-col opacity-70 h-[80vh]">
+          <div className="border-b-2 border-shipgrey">
+            <h1 className="font-extrabold text-green-950  text-2xl">DoneZone</h1>
+            <p className="italic">The zone where your tasks was done.</p>
+          </div>
+
+          <div className="flex-1 mt-3 overflow-auto" onDragOver={enableDropping} onDrop={(e) => handleDropOnColumn(e, "done")}>
+            <div className="space-y-2">
+              {loading ? (
+                <SkeletonArticle count={tasksPlaceholderCount} />
+              ) : (
+                renderColumnTasks("done")
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
-
-      
-
-    {/* Done */}
-    <div
-      className="rounded-md bg-fantasy p-4 flex flex-col opacity-70 h-[80vh]">
-      <div className="border-b-2 border-shipgrey">
-        <h1 className="font-extrabold text-green-950  text-2xl">DoneZone</h1>
-          <p className="italic">The zone where your tasks was done.</p>
-      </div>
-
-      <div className="flex-1 mt-3 overflow-auto" onDragOver={enableDropping} onDrop={(e) => handleDropOnColumn(e, "done")}>
-        <div className="space-y-2">
-          {loading ? (
-            <>
-              <SkeletonArticle count={tasksPlaceholderCount} />
-            </>
-          ) : (
-            tasks
-              .filter((task) => task.status === "done")
-              .map((task) => (
-                <div
-                  key={task.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, task.id)}
-                  className="w-full bg-pink-300 border rounded-md px-3 py-2 text-black text-sm flex"
-                >
-                  <div
-                    className="flex-1 break-words max-w-[calc(100%-10px)] prose prose-sm"
-                    dangerouslySetInnerHTML={{ __html: task.title }}
-                  />
-                  <div className="flex-shrink-0 ml-2 self-start">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <span className="flex items-center justify-center cursor-pointer">
-                        <span className="material-symbols-outlined !text-[20px] hover:text-gray-600 transition-colors">
-                          more_vert
-                        </span>
-                        </span>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <Dialog>
-                          <DialogTrigger>
-                            <h1
-                              onClick={() => {
-                                setEditingTaskId(task.id);         // store the task id
-                                setEditingTaskContent(task.title);  // populate editor with current title
-                              }}
-                              className="cursor-pointer hover:text-gray-500"
-                            >Edit</h1>
-                          </DialogTrigger>
-                          <DialogContent className="sm:max-w-[425px] md:max-w-[600px] lg:max-w-[900px] lg:max-h-[1000px]">
-                            <DialogHeader>
-                              <DialogTitle>Edit your task</DialogTitle>
-                              The zone where you can edit a specific task.
-                            </DialogHeader>
-                            <form action="" onSubmit={handleSubmit}>
-                                <EditorClient
-                                  value={editingTaskContent}
-                                  onChange={(content) => setEditingTaskContent(content)}
-                                />
-                              <DialogFooter>
-                                <DialogClose asChild>
-                                  <Button type="button" className="cursor-pointer">
-                                    Cancel
-                                  </Button>
-                                </DialogClose>
-                                <DialogClose>
-                                  <Button type="button" onClick={updateTask} className="cursor-pointer">Update</Button>
-                                </DialogClose>
-                              </DialogFooter>
-                            </form>
-                          </DialogContent>                       
-                        </Dialog>
-                        <DropdownMenuSeparator/>
-                        <Dialog>
-                          <DialogTrigger>
-                            <h1
-                            onClick={() => setEditingTaskId(task.id)}
-                            className="cursor-pointer hover:text-red-400"
-                            >Delete</h1>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              Are you sure that you want to delete this task?
-                            </DialogHeader>
-                            <DialogFooter>
-                              <DialogClose asChild>
-                                <Button type="button" className="cursor-pointer">Nevermind</Button>
-                              </DialogClose>
-                              <DialogClose>
-                                <Button type="button" onClick={deleteTask} className="hover:bg-red-600 hover:text-white cursor-pointer">Delete!</Button>
-                              </DialogClose>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>     
-                </div>
-              ))
-          )
-            }
-        </div>
-      </div>
-    </div>
-
-    {/* Delete */}
-    {/* <div
-      className={`rounded-md p-4 flex flex-col opacity-70 h-[80vh] transition-all duration-300 ${
-        isOverDelete ? "bg-red-600 border-red-800 text-white" : "bg-lilac"
-      }`}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setIsOverDelete(true);
-      }}
-      onDragLeave={() => setIsOverDelete(false)}
-      onDrop={(e) => {
-        setIsOverDelete(false);
-        handleDropDeleteColumn(e);
-      }}
-    >
-      <div className="border-b-2 border-red-900">
-        <h1 className="font-extrabold">Delete</h1>
-      </div>
-
-      <div className="flex-1 mt-3 overflow-auto flex flex-col items-center justify-center">
-        <span className="material-symbols-outlined text-5xl">delete</span>
-        <p className="mt-2 text-sm text-center">Drag a task here to delete</p>
-      </div>
-    </div> */}
-
-  </div>
-</div>
-);
-
-
+  );
 }
