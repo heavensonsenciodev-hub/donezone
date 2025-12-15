@@ -38,6 +38,7 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
   const [open, setOpen] = React.useState(false);
   const [userName, setUserName] = useState<string | null>(null);
   const tasksPlaceholderCount = 3;
+  const GAP = 1000;
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault()
@@ -212,144 +213,95 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
   };
 
   // Drop on column background -> place at top (we'll set position to minPosition - gap)
-  const handleDropOnColumn = async (
-    event: React.DragEvent<HTMLDivElement>,
-    newStatus: string
-  ) => {
-    event.preventDefault();
+const handleDropOnColumn = async (
+  event: React.DragEvent<HTMLDivElement>,
+  newStatus: string
+) => {
+  event.preventDefault();
 
-    const idStr = event.dataTransfer.getData("text/plain");
-    if (!idStr) return;
-    const idNum = Number(idStr);
-    if (Number.isNaN(idNum)) return;
+  const draggedId = Number(event.dataTransfer.getData("text/plain"));
+  if (!draggedId) return;
 
-    // compute new position: make it smaller than current smallest to appear at top
-    const column = tasks.filter(t => t.status === newStatus);
-    const minPos = column.length ? Math.min(...column.map(t => t.position ?? 0)) : undefined;
-    const GAP = 1000;
-    const newPos = (typeof minPos === "number") ? (minPos - GAP) : Date.now();
+  const column = tasks
+    .filter(t => t.status === newStatus)
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
-    // optimistic UI update
-    setTasks(prev => prev.map(t => t.id === idNum ? { ...t, status: newStatus, position: newPos } : t).sort((a,b)=> (a.position ?? 0) - (b.position ?? 0)));
+  const newPos = column.length
+    ? (column[0].position ?? GAP) - GAP
+    : GAP;
 
-    const { data, error } = await supabase
-      .from("tasks")
-      .update({ status: newStatus, position: newPos })
-      .eq("id", idNum)
-      .eq("uid", userId)
-      .select();
+  setTasks(prev =>
+    prev
+      .map(t =>
+        t.id === draggedId
+          ? { ...t, status: newStatus, position: newPos }
+          : t
+      )
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+  );
 
-    if (error) {
-      console.error("❌ Error updating status/position:", error);
-      // revert: reload or reset
-      // simple fallback: re-fetch tasks
-      const { data: refetch, error: refetchErr } = await supabase.from("tasks").select("*").eq("uid", userId).order("position",{ascending:true});
-      if (!refetchErr) setTasks(refetch || []);
-      return;
-    }
+  await supabase
+    .from("tasks")
+    .update({ status: newStatus, position: newPos })
+    .eq("id", draggedId)
+    .eq("uid", userId);
+};
 
-    // If positions are too close / collisions happen, reindex column
-    // Detect small gaps: if any adjacent gap <= 1, reindex
-    const updatedColumn = (await supabase.from("tasks").select("*").eq("uid", userId).order("position", { ascending: true })).data || [];
-    // update local
-    setTasks(updatedColumn);
-    // if needed reindex
-    // (simple heuristic) reindex if any adjacent positions differ by <= 1
-    for (let i=1;i<updatedColumn.length;i++){
-      if ((updatedColumn[i].position ?? 0) - (updatedColumn[i-1].position ?? 0) <= 1) {
-        await reindexColumn(newStatus);
-        break;
-      }
-    }
-  };
 
-  // Drop on a specific task element — insert before/after based on where the user dropped
-  const handleDropOnTask = async (
-    event: React.DragEvent<HTMLDivElement>,
-    targetId: number,
-    targetStatus: string
-  ) => {
-    event.preventDefault();
+const handleDropOnTask = async (
+  event: React.DragEvent<HTMLDivElement>,
+  targetId: number,
+  targetStatus: string
+) => {
+  event.preventDefault();
+  event.stopPropagation();
 
-    const idStr = event.dataTransfer.getData("text/plain");
-    if (!idStr) return;
-    const draggedId = Number(idStr);
-    if (Number.isNaN(draggedId)) return;
-    if (draggedId === targetId) return;
+  const draggedId = Number(event.dataTransfer.getData("text/plain"));
+  if (!draggedId || draggedId === targetId) return;
 
-    // Determine whether to insert before or after target by comparing drop Y with target midpoint
-    const currentTarget = event.currentTarget as HTMLElement;
-    const rect = currentTarget.getBoundingClientRect();
-    const clientY = (event as React.DragEvent).clientY;
-    const insertBefore = clientY < rect.top + rect.height / 2;
+  const column = tasks
+    .filter(t => t.status === targetStatus)
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
-    const column = tasks
-      .filter(t => t.status === targetStatus)
-      .sort((a,b) => (a.position ?? 0) - (b.position ?? 0));
+  const targetIndex = column.findIndex(t => t.id === targetId);
 
-    const targetIndex = column.findIndex(t => t.id === targetId);
-    const targetTask = column[targetIndex];
+  const prev = column[targetIndex - 1];
+  const next = column[targetIndex + 1];
+  const target = column[targetIndex];
 
-    const prevPos = targetIndex > 0 ? (column[targetIndex - 1].position ?? 0) : undefined;
-    const nextPos = targetTask?.position ?? undefined;
+  const rect = event.currentTarget.getBoundingClientRect();
+  const insertBefore = event.clientY < rect.top + rect.height / 2;
 
-    // compute new position by averaging neighbors to avoid mass updates
-    let newPos: number;
-    const GAP = 1000;
+  let newPos: number;
 
-    if (insertBefore) {
-      if (typeof prevPos === "number") {
-        newPos = Math.floor((prevPos + (nextPos ?? prevPos + GAP)) / 2);
-      } else {
-        // insert before first => make it smaller than first
-        newPos = (nextPos ?? Date.now()) - GAP;
-      }
-    } else {
-      // insert after target
-      const next = column[targetIndex + 1];
-      const nextPos2 = next?.position;
-      if (typeof nextPos2 === "number") {
-        newPos = Math.floor(((nextPos2) + (nextPos ?? nextPos2)) / 2);
-      } else {
-        // after last => larger than target
-        newPos = (nextPos ?? Date.now()) + GAP;
-      }
-    }
+  if (insertBefore) {
+    newPos = prev
+      ? Math.floor(((prev.position ?? 0) + (target.position ?? GAP)) / 2)
+      : (target.position ?? GAP) - GAP;
+  } else {
+    newPos = next
+      ? Math.floor(((target.position ?? GAP) + (next.position ?? GAP * 2)) / 2)
+      : (target.position ?? GAP) + GAP;
+  }
 
-    // If somehow newPos equals an existing pos (rare), offset by 1
-    if (column.some(t => t.position === newPos)) newPos += 1;
+  // Optimistic UI
+  setTasks(prev =>
+    prev
+      .map(t =>
+        t.id === draggedId
+          ? { ...t, status: targetStatus, position: newPos }
+          : t
+      )
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+  );
 
-    // optimistic update: set status and position locally and re-sort
-    setTasks(prev =>
-      prev.map(t => (t.id === draggedId ? { ...t, status: targetStatus, position: newPos } : t))
-          .sort((a,b) => (a.position ?? 0) - (b.position ?? 0))
-    );
+  await supabase
+    .from("tasks")
+    .update({ status: targetStatus, position: newPos })
+    .eq("id", draggedId)
+    .eq("uid", userId);
+};
 
-    const { data, error } = await supabase
-      .from("tasks")
-      .update({ status: targetStatus, position: newPos })
-      .eq("id", draggedId)
-      .eq("uid", userId)
-      .select();
-
-    if (error) {
-      console.error("❌ Error updating dragged task position:", error);
-      // fallback: re-fetch
-      const { data: refetch, error: refetchErr } = await supabase.from("tasks").select("*").eq("uid", userId).order("position",{ascending:true});
-      if (!refetchErr) setTasks(refetch || []);
-      return;
-    }
-
-    // If positions are too tight, reindex the target column
-    const updatedColumn = (await supabase.from("tasks").select("*").eq("uid", userId).order("position", { ascending: true })).data || [];
-    setTasks(updatedColumn);
-    for (let i=1;i<updatedColumn.length;i++){
-      if ((updatedColumn[i].position ?? 0) - (updatedColumn[i-1].position ?? 0) <= 1) {
-        await reindexColumn(targetStatus);
-        break;
-      }
-    }
-  };
 
   // Helper to render tasks for a given status (important: sort by position before mapping)
   const renderColumnTasks = (status: string) => {
