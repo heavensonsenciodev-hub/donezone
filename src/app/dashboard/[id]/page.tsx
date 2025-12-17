@@ -39,6 +39,7 @@ export default function DashboardIdPage({ params }: { params: { id: string } }) 
   const [userName, setUserName] = useState<string | null>(null);
   const tasksPlaceholderCount = 3;
   const GAP = 1000;
+  
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault()
@@ -335,7 +336,7 @@ const handleDropOnTask = async (
                   edit
                 </h1>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="sm:max-w-[425px] md:max-w-[600px] lg:max-w-[900px] lg:max-h-[1000px]">
                 <DialogHeader>
                   <DialogTitle>Edit your task</DialogTitle>
                 </DialogHeader>
